@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slack Chat Bridge - Example Client</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        #chat-container {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            height: 400px;
+            overflow-y: auto;
+            background: #f9f9f9;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .message.sent {
+            background: #e3f2fd;
+            text-align: right;
+        }
+        .message.received {
+            background: #fff3e0;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 10px;
+            border-radius: 4px;
+        }
+        .status.connected {
+            background: #c8e6c9;
+        }
+        .status.disconnected {
+            background: #ffcdd2;
+        }
+        #input-container {
+            display: flex;
+            gap: 10px;
+        }
+        #user-id-input {
+            width: 150px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        #message-input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #1976D2;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h1>Slack Chat Bridge - Example Client</h1>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div id="chat-container"></div>
+    
+    <div id="input-container">
+        <input type="text" id="user-id-input" placeholder="User ID" value="user123">
+        <input type="text" id="message-input" placeholder="Type your message..." disabled>
+        <button id="connect-btn" onclick="connect()">Connect</button>
+        <button id="send-btn" onclick="sendMessage()" disabled>Send</button>
+    </div>
+
+    <script>
+        let ws = null;
+        const chatContainer = document.getElementById('chat-container');
+        const statusDiv = document.getElementById('status');
+        const userIdInput = document.getElementById('user-id-input');
+        const messageInput = document.getElementById('message-input');
+        const connectBtn = document.getElementById('connect-btn');
+        const sendBtn = document.getElementById('send-btn');
+
+        function addMessage(text, type) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            messageDiv.textContent = text;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            if (connected) {
+                statusDiv.textContent = 'Connected';
+                statusDiv.className = 'status connected';
+                messageInput.disabled = false;
+                sendBtn.disabled = false;
+                connectBtn.disabled = true;
+                userIdInput.disabled = true;
+            } else {
+                statusDiv.textContent = 'Disconnected';
+                statusDiv.className = 'status disconnected';
+                messageInput.disabled = true;
+                sendBtn.disabled = true;
+                connectBtn.disabled = false;
+                userIdInput.disabled = false;
+            }
+        }
+
+        function connect() {
+            const userId = userIdInput.value.trim();
+            if (!userId) {
+                alert('Please enter a User ID');
+                return;
+            }
+
+            // Change this to your server URL
+            const wsUrl = `ws://localhost:8000/ws/${userId}`;
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateStatus(true);
+                addMessage('Connected to chat bridge', 'sent');
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log('Received:', data);
+                
+                if (data.type === 'slack_message') {
+                    addMessage(`Slack: ${data.message}`, 'received');
+                } else if (data.status === 'sent') {
+                    addMessage(`You: ${data.message}`, 'sent');
+                } else if (data.error) {
+                    addMessage(`Error: ${data.error}`, 'received');
+                }
+            };
+
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                addMessage('Connection error occurred', 'received');
+            };
+
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateStatus(false);
+                addMessage('Disconnected from chat bridge', 'received');
+            };
+        }
+
+        function sendMessage() {
+            const message = messageInput.value.trim();
+            if (!message || !ws || ws.readyState !== WebSocket.OPEN) {
+                return;
+            }
+
+            ws.send(JSON.stringify({ message: message }));
+            messageInput.value = '';
+        }
+
+        messageInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
+
